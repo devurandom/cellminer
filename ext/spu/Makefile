@@ -20,14 +20,15 @@ DEFINE		 = -DUNROLL_SHA256
 DEFINE		+= -Dinline="inline __attribute__((always_inline))"
 #DEFINE		+= -DDEBUG
 #OPTIMIZE	 = -O2 -fno-strict-aliasing -funroll-loops -ftree-vectorize
-OPTIMIZE	 = -O3 -fno-strict-aliasing -funroll-loops
+OPTIMIZE	 = -O3 -flto -funroll-loops
 #OPTIMIZE	+= -fmodulo-sched -fmodulo-sched-allow-regmoves
-MACHINE		 = -mno-safe-hints
+LDOPT		 = -O3 -flto -fuse-linker-plugin -Wl,-O3
+MACHINE		 = -march=celledp
 WARN		 = -Wall -Werror
 #WARN		+= -Wstrict-aliasing=0
 
 CFLAGS		 = $(DEFINE) $(OPTIMIZE) $(MACHINE) $(WARN) $(INCLUDEPATH)
-LDFLAGS		 = $(LIBPATH)
+LDFLAGS		 = $(LIBPATH) $(LDOPT)
 
 CC		 = spu-gcc
 AS		 = spu-as
