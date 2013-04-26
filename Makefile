@@ -18,17 +18,25 @@
 
 RUBY	= ruby1.9.1
 
-ext/cellminer.so: ext/Makefile ext/*.[ch]  \
+all: ext/libcellminer.so ruby/rbcellminer.so
+
+ext/libcellminer.so: ext/Makefile ext/*.[ch]  \
 		ext/spu/Makefile ext/spu/*.[chs]  \
 		ext/ppu/Makefile ext/ppu/*.[chs]
 	$(MAKE) -C ext
 
-ext/Makefile: ext/extconf.rb ext/depend
-	$(RUBY) -C ext -E ascii-8bit extconf.rb
+ruby/rbcellminer.so: ruby/Makefile ruby/*.[ch]  \
+		ext/libcellminer.so
+	cp -a  ext/libcellminer.so ruby/
+	$(MAKE) -C ruby
+
+ruby/Makefile: ruby/extconf.rb ruby/depend
+	$(RUBY) -C ruby -E ascii-8bit extconf.rb
 
 .PHONY: clean
 clean:
 	$(MAKE) -C ext $@
+	$(MAKE) -C ruby $@
 
 .PHONY: again
 again: clean

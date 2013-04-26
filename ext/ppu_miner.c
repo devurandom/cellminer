@@ -16,148 +16,83 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-# include <stdlib.h>
-# include <stdint.h>
-# include <string.h>
-# include <pthread.h>
-# include <ruby.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
 
-# include "ppu/params.h"
+#include "ppu/params.h"
+
+#include "ppu_miner.h"
+
+#define ERRSTR_MAX 128
 
 extern int ppu_mine(volatile struct worker_params *);
 
 struct ppu_miner {
   volatile struct worker_params params;
-
-  pthread_t thread;
 };
 
-static
-VALUE m_initialize(int argc, VALUE *argv, VALUE self)
-{
-  struct ppu_miner *miner;
+const int ppuminer_errstr_max = ERRSTR_MAX;
 
-  if (argc < 0 || argc > 1)
-    rb_raise(rb_eArgError, "wrong number of arguments (%d for 0..1)", argc);
+int
+ppuminer_create(struct ppu_miner **miner, char errstr[ERRSTR_MAX]) {
+	if (miner == NULL) {
+		strncpy(errstr, "argument 'miner' may not be NULL", ERRSTR_MAX);
+		return -1;
+	}
 
-  Data_Get_Struct(self, struct ppu_miner, miner);
+	int err_align = posix_memalign((void**)miner, 128, sizeof(**miner));
+	if (err_align) {
+		strncpy(errstr, "unable to allocate aligned memory", ERRSTR_MAX);
+		return -1;
+	}
 
-  if (argc > 0 && RTEST(argv[0]))
+	(*miner)->params.flags = 0;
+
+	return 0;
+}
+
+void
+ppuminer_delete(struct ppu_miner *miner) {
+	if (miner == NULL) {
+		return;
+	}
+
+	free(miner);
+}
+
+void
+ppuminer_setdebug(struct ppu_miner *miner) {
     miner->params.flags |= WORKER_FLAG_DEBUG;
-
-  return self;
 }
 
-static
-void *run_miner(void *data)
-{
-  struct ppu_miner *miner = data;
-  int oldvalue;
+void
+ppuminer_loadwork(struct ppu_miner *miner, const char *data, const char *target, unsigned long start_nonce, unsigned long range) {
+	memcpy((void*)miner->params.data.c,     data,    128);
+	memcpy((void*)miner->params.target.c,   target,   32);
 
-  pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldvalue);
-  pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldvalue);
-
-  switch (ppu_mine(&miner->params)) {
-  case WORKER_FOUND_NOTHING:
-    return (void *) Qfalse;
-
-  case WORKER_FOUND_SOMETHING:
-    return (void *) Qtrue;
-  }
-
-  return (void *) Qundef;
+	miner->params.start_nonce = start_nonce;
+	miner->params.range       = range;
 }
 
-static
-VALUE wait_miner(void *data)
-{
-  struct ppu_miner *miner = data;
-  void *retval;
+int
+ppuminer_run(struct ppu_miner *miner, unsigned long *nonce, char *errstr) {
+	int ret = ppu_mine(&miner->params);
+	switch (ret) {
+	case WORKER_FOUND_SOMETHING:
+		*nonce = miner->params.nonce;
+		return 0;
+	case WORKER_FOUND_NOTHING:
+		return 1;
+	}
 
-  if (pthread_join(miner->thread, &retval))
-    return Qundef;
-
-  if (retval == PTHREAD_CANCELED)
-    return Qfalse;
-
-  return (VALUE) retval;
+	strncpy(errstr, "unknown error", ERRSTR_MAX);
+	return -1;
 }
 
-static
-void unblock_miner(void *data)
-{
-  struct ppu_miner *miner = data;
-
-  pthread_cancel(miner->thread);
-}
-
-static
-VALUE m_run(VALUE self, VALUE data, VALUE target, VALUE midstate,
-	    VALUE start_nonce, VALUE range)
-{
-  struct ppu_miner *miner;
-  VALUE retval;
-
-  Data_Get_Struct(self, struct ppu_miner, miner);
-
-  /* prepare parameters */
-
-  StringValue(data);
-  StringValue(target);
-
-  if (RSTRING_LEN(data) != 128)
-    rb_raise(rb_eArgError, "data must be 128 bytes");
-  if (RSTRING_LEN(target) != 32)
-    rb_raise(rb_eArgError, "target must be 32 bytes");
-
-  memcpy((void *) miner->params.data.c,     RSTRING_PTR(data),    128);
-  memcpy((void *) miner->params.target.c,   RSTRING_PTR(target),   32);
-
-  miner->params.start_nonce = NUM2ULONG(start_nonce);
-  miner->params.range       = NUM2ULONG(range);
-
-  /* start a mining thread and unlock the Global Interpreter Lock */
-
-  if (pthread_create(&miner->thread, 0, run_miner, miner))
-    rb_raise(rb_eRuntimeError, "failed to create PPU thread");
-
-  retval = rb_thread_blocking_region(wait_miner, miner,
-				     unblock_miner, miner);
-
-  switch (retval) {
-  case Qtrue:
-    miner->params.data.m[1].words[3] = miner->params.nonce;
-    retval = rb_str_new((const char *) miner->params.data.c, 128);
-    break;
-
-  case Qundef:
-    rb_raise(rb_eRuntimeError, "PPU thread error");
-    break;
-  }
-
-  return retval;
-}
-
-static
-VALUE i_allocate(VALUE klass)
-{
-  struct ppu_miner *miner;
-
-  if (posix_memalign((void **) &miner, 128, sizeof(*miner)))
-    rb_raise(rb_eRuntimeError, "unable to allocate aligned memory");
-
-  miner->params.flags = 0;
-
-  return Data_Wrap_Struct(klass, 0, free, miner);
-}
-
-void Init_ppu_miner(VALUE container)
-{
-  VALUE cPPUMiner;
-
-  cPPUMiner = rb_define_class_under(container, "PPUMiner", rb_cObject);
-  rb_define_alloc_func(cPPUMiner, i_allocate);
-
-  rb_define_method(cPPUMiner, "initialize", m_initialize, -1);
-  rb_define_method(cPPUMiner, "run", m_run, 5);
+void
+ppuminer_stop(struct ppu_miner *miner) {
+	if (miner == NULL) {
+		return;
+	}
 }

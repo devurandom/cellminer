@@ -4,5 +4,5 @@
 *.a
 *.log
 depend.auto
-ext/Makefile
+ruby/Makefile
 core

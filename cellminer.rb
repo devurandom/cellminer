@@ -21,7 +21,7 @@ require 'uri'
 require 'thread'
 
 require_relative 'bitcoin.rb'
-require_relative 'ext/cellminer.so'
+require_relative 'ruby/rbcellminer.so'
 
 require_relative 'sha256.rb'
 
