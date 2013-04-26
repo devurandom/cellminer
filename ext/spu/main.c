@@ -117,15 +117,11 @@ int main(uint64_t speid, uint64_t argp, uint64_t envp)
     /* do work */
 
     if (unlikely(result = work_on(&params))) {
-      if (result < 0)
-	spu_stop(WORKER_VERIFY_ERROR);
-      else {
 	/* we found something? */
 	if (dma_params(&params, argp, dma_put))
 	  return WORKER_DMA_ERROR;
 
 	spu_stop(WORKER_FOUND_SOMETHING);
-      }
     }
     else
       spu_stop(WORKER_FOUND_NOTHING);
