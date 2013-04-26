@@ -60,7 +60,8 @@ int dma_params(struct worker_params *params, uint64_t ea,
   if (tag == MFC_TAG_INVALID)
     return -1;
 
-  size = (offsetof(struct worker_params, padding) + 127) & ~127;
+  /* size of data in struct, padded to a multiple of 128 */
+  size = pad_to_128(offsetof(struct worker_params, padding));
 
   dma(params, ea, size, tag);
 
