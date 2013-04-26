@@ -34,4 +34,9 @@ void hex(char *, const char *, uint32_t);
 void debug(const char *, ...);
 void debug_hash(const hash_t *, const char *);
 
+static inline
+uint32_t pad_to_128(uint32_t size) {
+	return (size + 127) & ~127;
+}
+
 # endif
