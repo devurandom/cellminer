@@ -32,10 +32,6 @@ struct worker_params {
     char c[32];
     hash_t h;
   } target;
-  union {
-    char c[32];
-    hash_t h;
-  } midstate;
 
   uint32_t start_nonce;
   uint32_t range;
@@ -52,8 +48,6 @@ enum {
 enum {
   WORKER_FOUND_NOTHING = 0,
   WORKER_FOUND_SOMETHING,
-
-  WORKER_VERIFY_ERROR
 };
 
 # endif
