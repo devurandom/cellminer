@@ -6,3 +6,4 @@
 depend.auto
 ruby/Makefile
 core
+__pycache__

@@ -1,0 +1,6 @@
+[submodule "python-blkmaker"]
+	path = python-blkmaker
+	url = git://gitorious.org/bitcoin/python-blkmaker.git
+[submodule "python-bitcoinrpc"]
+	path = python-bitcoinrpc
+	url = https://github.com/devurandom/python-bitcoinrpc.git
