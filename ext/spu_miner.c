@@ -16,13 +16,18 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-# include <stdlib.h>
-# include <stdint.h>
-# include <string.h>
-# include <ruby.h>
-# include <libspe2.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <assert.h>
 
-# include "spu/params.h"
+#include <libspe2.h>
+
+#include "spu/params.h"
+
+#include "spu_miner.h"
+
+#define ERRSTR_MAX 128
 
 struct spu_miner {
   /* must be first for proper alignment */
@@ -32,64 +37,6 @@ struct spu_miner {
   uint32_t spe_entry;
   spe_stop_info_t stop_info;
 };
-
-static
-VALUE m_initialize(int argc, VALUE *argv, VALUE self)
-{
-  struct spu_miner *miner;
-
-  if (argc < 0 || argc > 1)
-    rb_raise(rb_eArgError, "wrong number of arguments (%d for 0..1)", argc);
-
-  Data_Get_Struct(self, struct spu_miner, miner);
-
-  if (argc > 0 && RTEST(argv[0]))
-    miner->params.flags |= WORKER_FLAG_DEBUG;
-
-  return self;
-}
-
-static
-VALUE run_miner(void *data)
-{
-  struct spu_miner *miner = data;
-  VALUE retval = Qnil;
-
-  spe_context_run(miner->spe_context, &miner->spe_entry, 0,
-		  (void *) &miner->params, 0, &miner->stop_info);
-
-  if (miner->stop_info.stop_reason != SPE_STOP_AND_SIGNAL)
-    /* restart on next run */
-    miner->spe_entry = SPE_DEFAULT_ENTRY;
-  else {
-    switch (miner->stop_info.result.spe_signal_code) {
-    case WORKER_IRQ_SIGNAL:
-      /* SPE is responding to our stop signal; restart on next run */
-      miner->spe_entry = SPE_DEFAULT_ENTRY;
-
-      /* fall through */
-
-    case WORKER_FOUND_NOTHING:
-      retval = Qfalse;
-      break;
-
-    case WORKER_FOUND_SOMETHING:
-      retval = Qtrue;
-      break;
-    }
-  }
-
-  return retval;
-}
-
-static
-void unblock_miner(void *data)
-{
-  struct spu_miner *miner = data;
-
-  /* signal SPE worker to stop */
-  spe_signal_write(miner->spe_context, SPE_SIG_NOTIFY_REG_1, 1);
-}
 
 static
 void get_stop_reason(const spe_stop_info_t *stop_info,
@@ -137,120 +84,132 @@ void get_stop_reason(const spe_stop_info_t *stop_info,
   }
 }
 
-static
-VALUE m_run(VALUE self, VALUE data, VALUE target, VALUE midstate,
-	    VALUE start_nonce, VALUE range)
-{
-  struct spu_miner *miner;
-  VALUE retval;
+static void
+report_error(struct spu_miner *miner, char errstr[ERRSTR_MAX]) {
+	const char *reason;
+	int code;
 
-  Data_Get_Struct(self, struct spu_miner, miner);
+	get_stop_reason(&miner->stop_info, &reason, &code);
 
-  /* prepare parameters */
-
-  StringValue(data);
-  StringValue(target);
-  StringValue(midstate);
-
-  if (RSTRING_LEN(data) != 128)
-    rb_raise(rb_eArgError, "data must be 128 bytes");
-  if (RSTRING_LEN(target) != 32)
-    rb_raise(rb_eArgError, "target must be 32 bytes");
-  if (RSTRING_LEN(midstate) != 32)
-    rb_raise(rb_eArgError, "midstate must be 32 bytes");
-
-  memcpy((void *) miner->params.data,     RSTRING_PTR(data),    128);
-  memcpy((void *) miner->params.target,   RSTRING_PTR(target),   32);
-  memcpy((void *) miner->params.midstate, RSTRING_PTR(midstate), 32);
-
-  miner->params.start_nonce = NUM2ULONG(start_nonce);
-  miner->params.range       = NUM2ULONG(range);
-
-  /* unlock the Global Interpreter Lock and run the SPE context */
-
-  retval = rb_thread_blocking_region(run_miner, miner,
-				     unblock_miner, miner);
-
-  switch (retval) {
-    const char *reason;
-    int code;
-
-  case Qtrue:
-    retval = rb_str_new((const char *) miner->params.data, 128);
-    break;
-
-  case Qnil:
-    get_stop_reason(&miner->stop_info, &reason, &code);
-
-    if (miner->stop_info.stop_reason == SPE_STOP_AND_SIGNAL &&
-	code == WORKER_VERIFY_ERROR)
-      rb_raise(rb_eArgError, "midstate verification failed");
-
-    if (miner->stop_info.stop_reason == SPE_EXIT &&
-	code == WORKER_DMA_ERROR)
-      rb_raise(rb_eRuntimeError, "SPE encountered DMA error");
-
-    rb_raise(rb_eRuntimeError,
-	     "SPE worker stopped with %s (0x%08x)", reason, code);
-  }
-
-  return retval;
+	if (miner->stop_info.stop_reason == SPE_EXIT && code == WORKER_DMA_ERROR) {
+		strncpy(errstr, "SPE encountered DMA error", ERRSTR_MAX);
+	}
+	else {
+		snprintf(errstr, ERRSTR_MAX, "SPE worker stopped with %s (0x%08x)", reason, code);
+	}
 }
 
-static
-void i_free(struct spu_miner *miner)
-{
-  spe_context_destroy(miner->spe_context);
+const int spuminer_errstr_max = ERRSTR_MAX;
 
-  free(miner);
+int
+spuminer_create(struct spu_miner **miner, char errstr[ERRSTR_MAX]) {
+	if (miner == NULL) {
+		strncpy(errstr, "argument 'miner' may not be NULL", ERRSTR_MAX);
+		return -1;
+	}
+
+	int err_align = posix_memalign((void**)miner, 128, sizeof(**miner));
+	if (err_align) {
+		strncpy(errstr, "unable to allocate aligned memory", ERRSTR_MAX);
+		return -1;
+	}
+
+	(*miner)->spe_context = spe_context_create(0, NULL);
+	if ((*miner)->spe_context == NULL) {
+		free(*miner);
+
+		strncpy(errstr, "failed to create SPE context", ERRSTR_MAX);
+		return -1;
+	}
+
+	extern spe_program_handle_t spu_worker;
+	if (spe_program_load((*miner)->spe_context, &spu_worker)) {
+		spe_context_destroy((*miner)->spe_context);
+		free(*miner);
+
+		strncpy(errstr, "failed to load SPE program", ERRSTR_MAX);
+		return -1;
+	}
+
+	(*miner)->spe_entry = SPE_DEFAULT_ENTRY;
+	(*miner)->params.flags = 0;
+
+	return 0;
 }
 
-static
-VALUE i_allocate(VALUE klass)
-{
-  struct spu_miner *miner;
-  extern spe_program_handle_t spu_worker;
+void
+spuminer_delete(struct spu_miner *miner) {
+	if (miner == NULL) {
+		return;
+	}
 
-  if (posix_memalign((void **) &miner, 128, sizeof(*miner)))
-    rb_raise(rb_eRuntimeError, "unable to allocate aligned memory");
-
-  miner->spe_context = spe_context_create(0, 0);
-  if (miner->spe_context == 0) {
-    free(miner);
-
-    rb_raise(rb_eRuntimeError, "failed to create SPE context");
-  }
-
-  if (spe_program_load(miner->spe_context, &spu_worker)) {
-    spe_context_destroy(miner->spe_context);
-    free(miner);
-
-    rb_raise(rb_eRuntimeError, "failed to load SPE program");
-  }
-
-  miner->spe_entry = SPE_DEFAULT_ENTRY;
-
-  miner->params.flags = 0;
-
-  return Data_Wrap_Struct(klass, 0, i_free, miner);
+	spe_context_destroy(miner->spe_context);
+	free(miner);
 }
 
-void Init_spu_miner(VALUE container)
-{
-  VALUE cSPUMiner;
-  int info;
+void
+spuminer_setdebug(struct spu_miner *miner) {
+	miner->params.flags |= WORKER_FLAG_DEBUG;
+}
 
-  cSPUMiner = rb_define_class_under(container, "SPUMiner", rb_cObject);
-  rb_define_alloc_func(cSPUMiner, i_allocate);
+void
+spuminer_loadwork(struct spu_miner *miner, const char *data, const char *target, unsigned long start_nonce, unsigned long range) {
+	memcpy((void*)miner->params.data.c,     data,    128);
+	memcpy((void*)miner->params.target.c,   target,   32);
 
-  rb_define_method(cSPUMiner, "initialize", m_initialize, -1);
-  rb_define_method(cSPUMiner, "run", m_run, 5);
+	miner->params.start_nonce = start_nonce;
+	miner->params.range       = range;
+}
 
-  info = spe_cpu_info_get(SPE_COUNT_PHYSICAL_SPES, -1);
-  if (info > 0)
-    rb_define_const(cSPUMiner, "PHYSICAL_SPES", INT2NUM(info));
+int
+spuminer_run(struct spu_miner *miner, unsigned long *nonce, char *errstr) {
+	int err = spe_context_run(miner->spe_context, &miner->spe_entry, 0, (void*)&miner->params, 0, &miner->stop_info);
+	if (err < 0) {
+		snprintf(errstr, ERRSTR_MAX, "Error running SPE context: %s", strerror(errno));
+		return -1;
+	}
 
-  info = spe_cpu_info_get(SPE_COUNT_USABLE_SPES, -1);
-  if (info > 0)
-    rb_define_const(cSPUMiner, "USABLE_SPES", INT2NUM(info));
+	if (miner->stop_info.stop_reason != SPE_STOP_AND_SIGNAL) {
+		/* restart on next run */
+		miner->spe_entry = SPE_DEFAULT_ENTRY;
+
+		report_error(miner, errstr);
+		return -1;
+	}
+	else {
+		switch (miner->stop_info.result.spe_signal_code) {
+		case WORKER_IRQ_SIGNAL:
+			/* SPE is responding to our stop signal; restart on next run */
+			miner->spe_entry = SPE_DEFAULT_ENTRY;
+			/* fall through */
+		case WORKER_FOUND_NOTHING:
+			return 1;
+		case WORKER_FOUND_SOMETHING:
+			*nonce = miner->params.nonce;
+			return 0;
+		}
+	}
+
+	report_error(miner, errstr);
+	return -1;
+}
+
+void
+spuminer_stop(struct spu_miner *miner) {
+	if (miner == NULL) {
+		return;
+	}
+
+  /* signal SPE worker to stop */
+  spe_signal_write(miner->spe_context, SPE_SIG_NOTIFY_REG_1, 1);
+}
+
+int
+spuminer_physical_spes(void) {
+	return spe_cpu_info_get(SPE_COUNT_PHYSICAL_SPES, -1);
+}
+
+int
+spuminer_usable_spes(void) {
+	return spe_cpu_info_get(SPE_COUNT_USABLE_SPES, -1);
 }

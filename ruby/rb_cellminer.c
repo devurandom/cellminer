@@ -21,7 +21,7 @@
 extern void Init_spu_miner(VALUE);
 extern void Init_ppu_miner(VALUE);
 
-void Init_cellminer(void)
+void Init_rbcellminer(void)
 {
   VALUE mBitcoin;
 

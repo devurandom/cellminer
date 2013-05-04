@@ -1,4 +1,3 @@
-# -*- mode: makefile -*-
 #
 # cellminer - Bitcoin miner for the Cell Broadband Engine Architecture
 # Copyright © 2011 Robert Leslie
@@ -17,27 +16,16 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 
-spu_worker.o: spu/worker.elf
-	embedspu spu_worker $< $@
+require 'mkmf'
 
-spu/worker.elf: spu/Makefile spu/*.[chs]
-	$(MAKE) -C spu
+$objs = ['rb_cellminer.o',
+         'rb_spu_miner.o',
+         'rb_ppu_miner.o',
+         'libcellminer.so']
 
-ppu/worker.a: ppu/Makefile ppu/*.[chs]
-	$(MAKE) -C ppu
+$CFLAGS << ' -Wall -I../ext'
+$LDFLAGS << ' -Wl,-rpath="\$$ORIGIN/../ext"'
 
-clean: spu/clean ppu/clean
+raise "missing libspe2" unless have_library('spe2', 'spe_context_run')
 
-.PHONY: spu/clean
-spu/clean:
-	$(MAKE) -C spu clean
-
-.PHONY: ppu/clean
-ppu/clean:
-	$(MAKE) -C ppu clean
-
-depend.auto: *.[ch]
-	@$(CC) -MM *.c >$@
-
-*.o: Makefile
-include depend.auto
+create_makefile 'rbcellminer'
