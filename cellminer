@@ -18,7 +18,9 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 
-require_relative 'cellminer.rb'
+$: << File.expand_path(File.dirname(__FILE__) + "/ruby")
+
+require 'cellminer.rb'
 
 begin
   CellMiner.new(ARGV).main
