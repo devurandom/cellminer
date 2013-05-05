@@ -109,6 +109,48 @@ class Longpoll(threading.Thread):
 			self._tmpl_queue.put(tmpl)
 		log.debug("exiting")
 
+class SendWork(threading.Thread):
+	def __init__(self, pool_url, run, send_queue):
+		super(SendWork, self).__init__()
+		self.name = "sendwork"
+		self._pool_url = pool_url
+		self._run = run
+		self._send_queue = send_queue
+		self.reconnect()
+
+	def reconnect(self):
+		self._service = jsonrpc.ServiceProxy(self._pool_url, "submitblock")
+
+	def request(self, req):
+		try:
+			resp = self._service(*req["params"])
+
+			if not resp:
+				return (True, None)
+			else:
+				return (None, resp)
+		except:
+			traceback.print_exc()
+			self.reconnect()
+			return (None, None)
+
+	def run(self):
+		while self._run.is_set():
+			send = self._send_queue.get()
+			tmpl, dataid, data, nonce = send
+
+			req = tmpl.submit(data, dataid, nonce)
+			try:
+				resp, err = self.request(req)
+				if resp:
+					message("Sending nonce: Accepted")
+				else:
+					message("Sending nonce: Rejected")
+					message_indent("Reason: {}".format(err))
+			except:
+				traceback.print_exc()
+		log.debug("exiting")
+
 class MakeWork(threading.Thread):
 	def __init__(self, run, work_queue, tmpl_queue, nexttmpl, needtmpl):
 		super(MakeWork, self).__init__()
@@ -167,48 +209,6 @@ class MakeWork(threading.Thread):
 			self._tmpl_queue.task_done()
 		log.debug("exiting")
 
-class SendWork(threading.Thread):
-	def __init__(self, pool_url, run, send_queue):
-		super(SendWork, self).__init__()
-		self.name = "sendwork"
-		self._pool_url = pool_url
-		self._run = run
-		self._send_queue = send_queue
-		self.reconnect()
-
-	def reconnect(self):
-		self._service = jsonrpc.ServiceProxy(self._pool_url, "submitblock")
-
-	def request(self, req):
-		try:
-			resp = self._service(*req["params"])
-
-			if not resp:
-				return (True, None)
-			else:
-				return (None, resp)
-		except:
-			traceback.print_exc()
-			self.reconnect()
-			return (None, None)
-
-	def run(self):
-		while self._run.is_set():
-			send = self._send_queue.get()
-			tmpl, dataid, data, nonce = send
-
-			req = tmpl.submit(data, dataid, nonce)
-			try:
-				resp, err = self.request(req)
-				if resp:
-					message("Sending nonce: Accepted")
-				else:
-					message("Sending nonce: Rejected")
-					message_indent("Reason: {}".format(err))
-			except:
-				traceback.print_exc()
-		log.debug("exiting")
-
 class GetBlockTemplate:
 	def __init__(self, pool_url, run, work_queue, send_queue):
 		tmpl_queue = queue.Queue(maxsize=128)
@@ -216,19 +216,19 @@ class GetBlockTemplate:
 		needtmpl = threading.Event()
 		nexttmpl = threading.Event()
 
-		self._makework = MakeWork(run, work_queue, tmpl_queue, nexttmpl, needtmpl)
-		self._sendwork = SendWork(pool_url, run, send_queue)
 		self._gettmpl = GetTemplate(pool_url, run, tmpl_queue, needtmpl)
 		self._longpoll = Longpoll(pool_url, run, tmpl_queue, nexttmpl)
+		self._sendwork = SendWork(pool_url, run, send_queue)
+		self._makework = MakeWork(run, work_queue, tmpl_queue, nexttmpl, needtmpl)
 
 	def start(self):
-		self._makework.start()
-		self._sendwork.start()
 		self._gettmpl.start()
 		self._longpoll.start()
+		self._sendwork.start()
+		self._makework.start()
 
 	def join(self):
-		self._makework.join()
-		self._sendwork.join()
 		self._gettmpl.join()
 		self._longpoll.join()
+		self._sendwork.join()
+		self._makework.join()
