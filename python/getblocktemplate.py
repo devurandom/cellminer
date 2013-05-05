@@ -21,13 +21,12 @@ def print_json(req):
 	sys.stdout.write(json.dumps(req, indent=4))
 
 class GetTemplate(threading.Thread):
-	def __init__(self, pool_url, run, tmpl_queue, needtmpl):
+	def __init__(self, pool_url, run, tmpl_queue):
 		super(GetTemplate, self).__init__()
 		self.name = "gettmpl"
 		self._pool_url = pool_url
 		self._run = run
 		self._tmpl_queue = tmpl_queue
-		self._needtmpl = needtmpl
 		self.reconnect()
 
 	def reconnect(self):
@@ -42,8 +41,6 @@ class GetTemplate(threading.Thread):
 
 	def run(self):
 		while self._run.is_set():
-			self._needtmpl.wait()
-
 			tmpl = blktemplate.Template()
 			req = tmpl.request()
 
@@ -57,20 +54,20 @@ class GetTemplate(threading.Thread):
 
 			tmpl.target = binascii.a2b_hex(resp["target"].encode("ascii"))
 
-			message("Received template")
-			self._tmpl_queue.put(tmpl)
-
-			self._needtmpl.clear()
+			log.debug("Received template")
+			try:
+				self._tmpl_queue.put(tmpl, timeout=tmpl.time_left()/4)
+			except queue.Full:
+				pass
 		log.debug("exiting")
 
 class Longpoll(threading.Thread):
-	def __init__(self, pool_url, run, tmpl_queue, nexttmpl):
+	def __init__(self, pool_url, run, lp_queue):
 		super(Longpoll, self).__init__()
 		self.name = "Longpoll"
 		self._pool_url = pool_url
 		self._run = run
-		self._tmpl_queue = tmpl_queue
-		self._nexttmpl = nexttmpl
+		self._lp_queue = lp_queue
 		self._lpid = None
 		self.reconnect()
 
@@ -100,13 +97,11 @@ class Longpoll(threading.Thread):
 			self._lpid = resp["longpollid"]
 			tmpl.target = binascii.a2b_hex(resp["target"].encode("ascii"))
 
-			with self._tmpl_queue.mutex:
-				self._tmpl_queue.queue.clear()
+			with self._lp_queue.mutex:
+				self._lp_queue.queue.clear()
 
-			self._nexttmpl.set()
-
-			message("Received template from longpoll")
-			self._tmpl_queue.put(tmpl)
+			log.debug("Received template from longpoll")
+			self._lp_queue.put(tmpl)
 		log.debug("exiting")
 
 class SendWork(threading.Thread):
@@ -152,26 +147,31 @@ class SendWork(threading.Thread):
 		log.debug("exiting")
 
 class MakeWork(threading.Thread):
-	def __init__(self, run, work_queue, tmpl_queue, nexttmpl, needtmpl):
+	def __init__(self, run, work_queue, tmpl_queue, lp_queue):
 		super(MakeWork, self).__init__()
 		self.name = "makework"
 		self._run = run
 		self._work_queue = work_queue
 		self._tmpl_queue = tmpl_queue
-		self._nexttmpl = nexttmpl
-		self._needtmpl = needtmpl
+		self._lp_queue = lp_queue
 
 	def next(self, tmpl):
-		return not self._run.is_set() or self._nexttmpl.is_set() or not tmpl.time_left() or not tmpl.work_left()
+		return not self._run.is_set() or not self._lp_queue.empty() or not tmpl.time_left() or not tmpl.work_left()
 
 	def run(self):
 		while self._run.is_set():
 			log.debug("waiting ({})".format(self._tmpl_queue.qsize()))
-			tmpl = self._tmpl_queue.get()
+			tmpl = None
+			q = None
+			try:
+				tmpl = self._lp_queue.get(block=False)
+				q = self._lp_queue
+				message("Got template from longpoll")
+			except queue.Empty:
+				tmpl = self._tmpl_queue.get()
+				q = self._tmpl_queue
+				message("Got template")
 
-			self._nexttmpl.clear()
-
-			message("Working on next template")
 			while (not self.next(tmpl)):
 				log.debug("time left: {}".format(tmpl.time_left()))
 
@@ -192,34 +192,24 @@ class MakeWork(threading.Thread):
 					self._work_queue.put([tmpl, dataid, data, tmpl.target, start_nonce, r])
 					if self.next(tmpl):
 						break
-					if tmpl.time_left() < 10 and self._tmpl_queue.empty():
-						log.debug("Requesting next template")
-						self._needtmpl.set()
 
-			log.debug("ended because: {} {} {} {}".format(self._run.is_set(), not self._nexttmpl.is_set(), tmpl.time_left(), tmpl.work_left()))
-
-			if self._tmpl_queue.empty():
-				self._needtmpl.set()
-
-			log.debug("clearing")
+			log.debug("clearing because: {} {} {} {}".format(self._run.is_set(), self._lp_queue.empty(), tmpl.time_left(), tmpl.work_left()))
 			with self._work_queue.mutex:
 				self._work_queue.queue.clear()
 
-			message("Finished template ({} queued)".format(self._tmpl_queue.qsize()))
-			self._tmpl_queue.task_done()
+			log.debug("Finished template ({} queued)".format(self._tmpl_queue.qsize()))
+			q.task_done()
 		log.debug("exiting")
 
 class GetBlockTemplate:
 	def __init__(self, pool_url, run, work_queue, send_queue):
-		tmpl_queue = queue.Queue(maxsize=128)
+		lp_queue = queue.Queue(maxsize=1)
+		tmpl_queue = queue.Queue(maxsize=1)
 
-		needtmpl = threading.Event()
-		nexttmpl = threading.Event()
-
-		self._gettmpl = GetTemplate(pool_url, run, tmpl_queue, needtmpl)
-		self._longpoll = Longpoll(pool_url, run, tmpl_queue, nexttmpl)
+		self._gettmpl = GetTemplate(pool_url, run, tmpl_queue)
+		self._longpoll = Longpoll(pool_url, run, lp_queue)
 		self._sendwork = SendWork(pool_url, run, send_queue)
-		self._makework = MakeWork(run, work_queue, tmpl_queue, nexttmpl, needtmpl)
+		self._makework = MakeWork(run, work_queue, tmpl_queue, lp_queue)
 
 	def start(self):
 		self._gettmpl.start()

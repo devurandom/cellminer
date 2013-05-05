@@ -12,6 +12,7 @@ from miner import Miner
 from cpu_miner import CPUMiner
 from ppu_miner import PPUMiner
 from spu_miner import SPUMiner
+
 from getblocktemplate import GetBlockTemplate
 
 import bitcoinrpc.authproxy
@@ -37,8 +38,8 @@ miners = []
 
 run = threading.Event()
 
-work_queue = queue.Queue(maxsize=128)
-send_queue = queue.Queue(maxsize=128)
+work_queue = queue.Queue(maxsize=64)
+send_queue = queue.Queue()
 
 gbt = GetBlockTemplate(options.pool_url, run, work_queue, send_queue)
 
