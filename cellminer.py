@@ -2,6 +2,7 @@
 
 import sys
 sys.path.append("python")
+sys.path.append("python-bitcoinrpc")
 
 import struct, threading, queue, time, argparse, socket, traceback, multiprocessing, logging
 logging.basicConfig(format="%(asctime)s %(threadName)s: %(message)s")
@@ -12,6 +13,9 @@ from cpu_miner import CPUMiner
 from ppu_miner import PPUMiner
 from spu_miner import SPUMiner
 from getblocktemplate import GetBlockTemplate
+
+import bitcoinrpc.authproxy
+bitcoinrpc.authproxy.USER_AGENT = "Cell Miner/2.0"
 
 def message(text):
 	sys.stdout.write("{} >> {}\n".format(time.strftime("%c"), text))

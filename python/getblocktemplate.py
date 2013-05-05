@@ -9,9 +9,6 @@ log = logging.getLogger(__name__)
 import blktemplate
 import jsonrpc
 
-import bitcoinrpc.authproxy
-bitcoinrpc.authproxy.USER_AGENT = "Cell Miner/2.0"
-
 NSLICES = 128
 QUANTUM = int(0x100000000 / NSLICES)
 
