@@ -227,7 +227,7 @@ class GetBlockTemplate:
 		self._gettmpl.start()
 		self._longpoll.start()
 
-	def stop(self):
+	def join(self):
 		self._makework.join()
 		self._sendwork.join()
 		self._gettmpl.join()

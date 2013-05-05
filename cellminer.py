@@ -84,7 +84,7 @@ except KeyboardInterrupt:
 	message("Shutting down ...")
 	run.clear()
 
-	gbt.stop()
+	gbt.join()
 
 	for miner in miners:
 		miner.join()
