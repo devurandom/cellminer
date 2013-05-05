@@ -40,7 +40,7 @@ run = threading.Event()
 work_queue = queue.Queue(maxsize=128)
 send_queue = queue.Queue(maxsize=128)
 
-getblocktemplate = GetBlockTemplate(options.pool_url, run, work_queue, send_queue)
+gbt = GetBlockTemplate(options.pool_url, run, work_queue, send_queue)
 
 #sys.stdout.write("Creating 2 CPU miners\n")
 #for i in range(2):
@@ -57,7 +57,7 @@ for i in range(options.spe):
 
 run.set()
 
-getblocktemplate.start()
+gbt.start()
 
 for miner in miners:
 	miner.start()
@@ -84,7 +84,7 @@ except KeyboardInterrupt:
 	message("Shutting down ...")
 	run.clear()
 
-	getblocktemplate.stop()
+	gbt.stop()
 
 	for miner in miners:
 		miner.join()
