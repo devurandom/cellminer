@@ -2,8 +2,7 @@ import sys
 sys.path.append("python-blkmaker")
 sys.path.append("python-bitcoinrpc")
 
-from binascii import a2b_hex
-import struct, traceback, threading, queue, logging, time
+import binascii, struct, traceback, threading, queue, logging, time
 log = logging.getLogger(__name__)
 
 import blktemplate
@@ -56,7 +55,7 @@ class GetTemplate(threading.Thread):
 	
 			tmpl.add(resp)
 
-			tmpl.target = a2b_hex(resp["target"].encode("ascii"))
+			tmpl.target = binascii.a2b_hex(resp["target"].encode("ascii"))
 
 			message("Received template")
 			self._tmpl_queue.put(tmpl)
@@ -99,7 +98,7 @@ class Longpoll(threading.Thread):
 			tmpl.add(resp)
 
 			self._lpid = resp["longpollid"]
-			tmpl.target = a2b_hex(resp["target"].encode("ascii"))
+			tmpl.target = binascii.a2b_hex(resp["target"].encode("ascii"))
 
 			with self._tmpl_queue.mutex:
 				self._tmpl_queue.queue.clear()
