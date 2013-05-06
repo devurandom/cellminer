@@ -11,6 +11,8 @@ import jsonrpc
 NSLICES = 128
 QUANTUM = int(0x100000000 / NSLICES)
 
+RETRIES = 10
+
 def message(text):
 	sys.stdout.write("{} >> {}\n".format(time.strftime("%c"), text))
 
@@ -33,11 +35,12 @@ class GetTemplate(threading.Thread):
 		self._service = jsonrpc.ServiceProxy(self._pool_url, "getblocktemplate")
 
 	def request(self, req):
-		try:
-			return self._service(*req["params"])
-		except:
-			traceback.print_exc()
-			self.reconnect()
+		for i in range(RETRIES):
+			try:
+				return self._service(*req["params"])
+			except:
+				traceback.print_exc()
+				self.reconnect()
 
 	def run(self):
 		while self._run.is_set():
@@ -75,11 +78,12 @@ class Longpoll(threading.Thread):
 		self._service = jsonrpc.ServiceProxy(self._pool_url, "getblocktemplate", timeout=60*60)
 
 	def longpoll(self, req):
-		try:
-			return self._service(*req["params"])
-		except:
-			traceback.print_exc()
-			self.reconnect()
+		for i in range(RETRIES):
+			try:
+				return self._service(*req["params"])
+			except:
+				traceback.print_exc()
+				self.reconnect()
 
 	def run(self):
 		while self._run.is_set():
@@ -117,17 +121,18 @@ class SendWork(threading.Thread):
 		self._service = jsonrpc.ServiceProxy(self._pool_url, "submitblock")
 
 	def request(self, req):
-		try:
-			resp = self._service(*req["params"])
+		for i in range(RETRIES):
+			try:
+				resp = self._service(*req["params"])
 
-			if not resp:
-				return (True, None)
-			else:
-				return (None, resp)
-		except:
-			traceback.print_exc()
-			self.reconnect()
-			return (None, None)
+				if not resp:
+					return (True, None)
+				else:
+					return (None, resp)
+			except:
+				traceback.print_exc()
+				self.reconnect()
+		return (None, None)
 
 	def run(self):
 		while self._run.is_set():
