@@ -96,10 +96,4 @@ try:
 except KeyboardInterrupt:
 	message("Shutting down ...")
 	run.clear()
-
-	gbt.join()
-
-	for miner in miners:
-		miner.join()
-
 	sharelog["file"].close()
