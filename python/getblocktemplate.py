@@ -21,6 +21,7 @@ def print_json(req):
 class GetTemplate(threading.Thread):
 	def __init__(self, pool_url, run, tmpl_queue):
 		super(GetTemplate, self).__init__()
+		self.daemon = True
 		self.name = "gettmpl"
 		self._pool_url = pool_url
 		self._run = run
@@ -63,6 +64,7 @@ class GetTemplate(threading.Thread):
 class Longpoll(threading.Thread):
 	def __init__(self, pool_url, run, lp_queue):
 		super(Longpoll, self).__init__()
+		self.daemon = True
 		self.name = "Longpoll"
 		self._pool_url = pool_url
 		self._run = run
@@ -107,6 +109,7 @@ class Longpoll(threading.Thread):
 class SendWork(threading.Thread):
 	def __init__(self, pool_url, run, send_queue, sharelog = None):
 		super(SendWork, self).__init__()
+		self.daemon = True
 		self.name = "sendwork"
 		self._pool_url = pool_url
 		self._run = run
@@ -165,6 +168,7 @@ class SendWork(threading.Thread):
 class MakeWork(threading.Thread):
 	def __init__(self, run, work_queue, tmpl_queue, lp_queue):
 		super(MakeWork, self).__init__()
+		self.daemon = True
 		self.name = "makework"
 		self._run = run
 		self._work_queue = work_queue

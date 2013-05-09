@@ -4,6 +4,7 @@ log = logging.getLogger(__name__)
 class Miner(threading.Thread):
 	def __init__(self, miner, run, work_queue, send_queue):
 		super(Miner, self).__init__()
+		self.daemon = True
 		self.name = "{} ({})".format(self.name, repr(type(miner)))
 		self.miner = miner
 		self.rate = 0
