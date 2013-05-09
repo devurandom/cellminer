@@ -109,12 +109,13 @@ class Longpoll(threading.Thread):
 		log.debug("exiting")
 
 class SendWork(threading.Thread):
-	def __init__(self, pool_url, run, send_queue):
+	def __init__(self, pool_url, run, send_queue, sharelog = None):
 		super(SendWork, self).__init__()
 		self.name = "sendwork"
 		self._pool_url = pool_url
 		self._run = run
 		self._send_queue = send_queue
+		self._sharelog = sharelog
 		self.reconnect()
 
 	def reconnect(self):
@@ -142,11 +143,25 @@ class SendWork(threading.Thread):
 			req = tmpl.submit(data, dataid, nonce)
 			try:
 				resp, err = self.request(req)
+				self._sharelog["file"].write("{} {} {}".format(int(time.time()), binascii.b2a_hex(data).decode("ascii"), nonce))
 				if resp:
 					message("Sending nonce: Accepted")
+					if self._sharelog:
+						self._sharelog["accepted"] += 1
+						self._sharelog["file"].write(" accepted\n")
+				elif not resp and not err:
+					message("Sending nonce: Failed")
+					if self._sharelog:
+						self._sharelog["failed"] += 1
+						self._sharelog["file"].write(" failed\n")
 				else:
 					message("Sending nonce: Rejected")
 					message_indent("Reason: {}".format(err))
+					if self._sharelog:
+						self._sharelog["rejected"] += 1
+						self._sharelog["file"].write(" rejected\n")
+				if self._sharelog:
+					self._sharelog["file"].flush()
 			except:
 				traceback.print_exc()
 		log.debug("exiting")
@@ -207,13 +222,13 @@ class MakeWork(threading.Thread):
 		log.debug("exiting")
 
 class GetBlockTemplate:
-	def __init__(self, pool_url, run, work_queue, send_queue):
+	def __init__(self, pool_url, run, work_queue, send_queue, sharelog = None):
 		lp_queue = queue.Queue(maxsize=1)
 		tmpl_queue = queue.Queue(maxsize=1)
 
 		self._gettmpl = GetTemplate(pool_url, run, tmpl_queue)
 		self._longpoll = Longpoll(pool_url, run, lp_queue)
-		self._sendwork = SendWork(pool_url, run, send_queue)
+		self._sendwork = SendWork(pool_url, run, send_queue, sharelog)
 		self._makework = MakeWork(run, work_queue, tmpl_queue, lp_queue)
 
 	def start(self):

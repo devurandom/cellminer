@@ -34,6 +34,14 @@ options = optparser.parse_args()
 if options.debug:
 	logging.getLogger().setLevel(logging.DEBUG)
 
+sharelog = {
+	"start": int(time.time()),
+	"accepted": 0,
+	"rejected": 0,
+	"failed": 0,
+	"file": open("share." + socket.gethostname() + ".log", "w"),
+}
+
 miners = []
 
 run = threading.Event()
@@ -41,7 +49,7 @@ run = threading.Event()
 work_queue = queue.Queue(maxsize=64)
 send_queue = queue.Queue()
 
-gbt = GetBlockTemplate(options.pool_url, run, work_queue, send_queue)
+gbt = GetBlockTemplate(options.pool_url, run, work_queue, send_queue, sharelog=sharelog)
 
 #sys.stdout.write("Creating 2 CPU miners\n")
 #for i in range(2):
@@ -75,7 +83,7 @@ try:
 		for miner in miners:
 			rate += miner.rate
 			alive += (miner.alive > (time.time()-60)) and 1 or 0
-		message("{:.3f} Mh/s (work: {} queued)".format(rate/1000000, work_queue.qsize()))
+		message("{:.3f} Mh/s | queues: T:{} W:{} | shares: A:{} R:{} F:{} since {}".format(rate/1000000, "?", work_queue.qsize(), sharelog["accepted"], sharelog["rejected"], sharelog["failed"], time.strftime("%Y-%m-%d %H-%M-%S", time.gmtime(sharelog["start"]))))
 		log.debug("{} miners alive".format(alive))
 
 		dead = len(miners) - alive
