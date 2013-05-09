@@ -23,7 +23,7 @@ import bitcoinrpc.authproxy
 bitcoinrpc.authproxy.USER_AGENT = "Cell Miner/2.0"
 
 def message(text):
-	sys.stdout.write("{} >> {}\n".format(time.strftime("%c"), text))
+	sys.stdout.write("{} >> {}\n".format(time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()), text))
 
 def message_indent(text):
 	sys.stdout.write("                            {}\n".format(text))

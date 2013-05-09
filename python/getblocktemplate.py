@@ -10,7 +10,7 @@ QUANTUM = int(0x100000000 / NSLICES)
 RETRIES = 10
 
 def message(text):
-	sys.stdout.write("{} >> {}\n".format(time.strftime("%c"), text))
+	sys.stdout.write("{} >> {}\n".format(time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()), text))
 
 def message_indent(text):
 	sys.stdout.write("                            {}\n".format(text))
