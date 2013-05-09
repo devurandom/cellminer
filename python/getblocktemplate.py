@@ -158,7 +158,7 @@ class SendWork(threading.Thread):
 					message_indent("Reason: {}".format(err))
 					if self._sharelog:
 						self._sharelog["rejected"] += 1
-						self._sharelog["file"].write(" rejected\n")
+						self._sharelog["file"].write(" rejected {}\n".format(err))
 				if self._sharelog:
 					self._sharelog["file"].flush()
 			except:
