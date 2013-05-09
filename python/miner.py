@@ -15,7 +15,8 @@ class Miner(threading.Thread):
 
 	def run(self):
 		while self._run.is_set():
-			self.alive = time.time()
+			start = time.time()
+			self.alive = start
 
 			log.debug("waiting ({})".format(self._work_queue.qsize()))
 			work = self._work_queue.get()
@@ -23,13 +24,15 @@ class Miner(threading.Thread):
 
 			log.debug("working")
 			self.miner.loadwork(data, target, start_nonce, r)
-			start = time.time()
+
 			nonce = self.miner.run()
-			if not nonce:
-				self.rate = r / (time.time() - start)
-			else:
+			if nonce:
 				log.debug("found {} for {} -> {}".format(nonce, dataid, data))
 				nonce = socket.ntohl(nonce)
 				self._send_queue.put([tmpl, dataid, data[:76], nonce])
 
 			self._work_queue.task_done()
+
+			if not nonce:
+				stop = time.time()
+				self.rate = r / (stop - start)
