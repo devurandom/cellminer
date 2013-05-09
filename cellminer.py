@@ -101,3 +101,5 @@ except KeyboardInterrupt:
 
 	for miner in miners:
 		miner.join()
+
+	sharelog["file"].close()
