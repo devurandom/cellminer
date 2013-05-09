@@ -1,8 +1,4 @@
-import sys
-sys.path.append("python-blkmaker")
-sys.path.append("python-bitcoinrpc")
-
-import binascii, struct, traceback, threading, queue, logging, time
+import binascii, struct, traceback, threading, queue, logging, time, sys
 log = logging.getLogger(__name__)
 
 import blktemplate

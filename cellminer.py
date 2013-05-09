@@ -1,8 +1,12 @@
 #!/usr/bin/python3
 
+import os
+dir = os.path.dirname(__file__)
+
 import sys
-sys.path.append("python")
-sys.path.append("python-bitcoinrpc")
+sys.path.append(os.path.join(dir, "python"))
+sys.path.append(os.path.join(dir, "python-bitcoinrpc"))
+sys.path.append(os.path.join(dir, "python-blkmaker"))
 
 import struct, threading, queue, time, argparse, socket, traceback, multiprocessing, logging
 logging.basicConfig(format="%(asctime)s %(threadName)s: %(message)s")

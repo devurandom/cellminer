@@ -1,6 +1,9 @@
+import os
+dir = os.path.dirname(__file__)
+
 from ctypes import *
 
-cellminer = cdll.LoadLibrary("ext/libcellminer.so")
+cellminer = cdll.LoadLibrary(os.path.join(dir, "../ext/libcellminer.so"))
 
 ppuminer_errstr_max = c_int.in_dll(cellminer, "ppuminer_errstr_max").value
 

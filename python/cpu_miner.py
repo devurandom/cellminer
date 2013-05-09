@@ -1,6 +1,3 @@
-import sys
-sys.path.append("python-blkmaker")
-
 import struct
 
 from blkmaker import _dblsha256
