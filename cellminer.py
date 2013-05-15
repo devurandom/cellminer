@@ -10,7 +10,7 @@ sys.path.append(os.path.join(dir, "python-blkmaker"))
 
 import struct, threading, queue, time, argparse, socket, traceback, multiprocessing, logging
 logging.basicConfig(format="%(asctime)s %(threadName)s: %(message)s")
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 from miner import Miner
 from cpu_miner import CPUMiner

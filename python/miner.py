@@ -1,5 +1,5 @@
 import time, socket, logging, threading
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 class Miner(threading.Thread):
 	def __init__(self, miner, run, work_queue, send_queue):

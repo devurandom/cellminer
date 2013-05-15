@@ -1,5 +1,5 @@
 import binascii, struct, traceback, threading, queue, logging, time, sys
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 import blktemplate
 import jsonrpc
