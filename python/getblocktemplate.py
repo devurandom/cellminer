@@ -211,6 +211,9 @@ class MakeWork(threading.Thread):
 				log.debug("time left: {}".format(tmpl.time_left()))
 
 				(data, dataid) = tmpl.get_data()
+				if not data:
+					log.debug("Received no data from template, trying next")
+					break
 
 				log.debug("{} -> {}".format(dataid, data))
 				assert(len(data) == 76)
